@@ -1,0 +1,268 @@
+<html>
+<head>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #ffffff;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        h1 {
+            padding: 20px;
+            margin: 0;
+            background-color: #2d2d2d;
+        }
+        .container {
+            display: flex;
+            padding: 0px;
+            gap: 0px;
+        }
+        .video-container {
+            flex: 0 0 640px;
+            position: relative;
+        }
+        .control-panel {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            background-color: #2d2d2d;
+            border-radius: 8px;
+        }
+        .wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: fit-content;
+        }
+        .canvas-container {
+            position: relative;
+            width: fit-content;
+        }
+        #videoFeed {
+            display: block;
+            border-radius: 8px;
+        }
+        #overlayCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            border-radius: 8px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            padding: 20px;
+            background-color: #1a1a1a;
+            border: none,
+            border-radius: 8px;
+            min-width: 100%;
+            box-sizing: border-box;
+        }
+        .button {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #404040;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        .button:hover {
+            background-color: #505050;
+        }
+        .button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <div class="container">
+            <img id="videoFeed" src="{{ url_for('video_feed') }}" width="{{ width }}" height="{{ height }}">
+            <canvas id="overlayCanvas" width="{{ width }}" height="{{ height }}"></canvas>
+        </div>
+        <div class="controls">
+            <button id="clearBtn" class="button" onclick="clearCanvas()">Clear Prompts</button>
+            <button id="submitBtn" class="button" onclick="submitInput()">Submit & Track</button>
+            <button id="resetBtn" class="button" onclick="resetTracker()" disabled>Reset Tracker</button>
+        </div>
+    </div>
+
+    <script>
+    const videoFeed = document.getElementById('videoFeed');
+    const canvas = document.getElementById('overlayCanvas');
+    const ctx = canvas.getContext('2d');
+    const resetBtn = document.getElementById('resetBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const clearBtn = document.getElementById('clearBtn');
+
+    const CANVAS_WIDTH = canvas.width;
+    const CANVAS_HEIGHT = canvas.height;
+
+    let points = [];
+    let boxes = [];
+    let drawingBox = false;
+    let startX, startY;
+    let dragStartX, dragStartY;
+    let isTracking = false;
+    let overlayTimeout = null;
+
+    canvas.addEventListener('click', (e) => {
+        if (!drawingBox && !isTracking) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = CANVAS_WIDTH / rect.width;
+            const scaleY = CANVAS_HEIGHT / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            if (dragStartX === undefined ||
+                Math.abs(x - dragStartX) < 5 && Math.abs(y - dragStartY) < 5) {
+                points.push([x, y]);
+                drawPoint(x, y);
+                updateButtonStates();
+            }
+        }
+    });
+
+    function drawPoint(x, y) {
+        ctx.fillStyle = 'red';
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (isTracking) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = CANVAS_WIDTH / rect.width;
+        const scaleY = CANVAS_HEIGHT / rect.height;
+        drawingBox = true;
+        startX = (e.clientX - rect.left) * scaleX;
+        startY = (e.clientY - rect.top) * scaleY;
+        dragStartX = startX;
+        dragStartY = startY;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (!drawingBox || isTracking) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = CANVAS_WIDTH / rect.width;
+        const scaleY = CANVAS_HEIGHT / rect.height;
+        const currentX = (e.clientX - rect.left) * scaleX;
+        const currentY = (e.clientY - rect.top) * scaleY;
+
+        redrawCanvas();
+        ctx.strokeStyle = 'green';
+        ctx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+        if (!drawingBox || isTracking) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = CANVAS_WIDTH / rect.width;
+        const scaleY = CANVAS_HEIGHT / rect.height;
+        const endX = (e.clientX - rect.left) * scaleX;
+        const endY = (e.clientY - rect.top) * scaleY;
+
+        if (Math.abs(endX - dragStartX) > 5 || Math.abs(endY - dragStartY) > 5) {
+            boxes.push([
+                Math.min(startX, endX),
+                Math.min(startY, endY),
+                Math.abs(endX - startX),
+                Math.abs(endY - startY)
+            ]);
+            updateButtonStates();
+        }
+
+        drawingBox = false;
+        redrawCanvas();
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
+    function clearCanvas() {
+        if (overlayTimeout) {
+            clearTimeout(overlayTimeout);
+            overlayTimeout = null;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        points = [];
+        boxes = [];
+        updateButtonStates();
+    }
+
+    function resetTracker() {
+        fetch('/reset_tracker', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        })
+        .then(() => {
+            isTracking = false;
+            clearCanvas();
+            updateButtonStates();
+        });
+    }
+
+    function updateButtonStates() {
+        const hasPrompts = points.length > 0 || boxes.length > 0;
+        submitBtn.disabled = !hasPrompts || isTracking;
+        resetBtn.disabled = !isTracking;
+        clearBtn.disabled = !hasPrompts || isTracking;
+    }
+
+    function redrawCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        points.forEach(([x, y]) => drawPoint(x, y));
+        ctx.strokeStyle = 'green';
+        boxes.forEach(([x, y, w, h]) => {
+            ctx.strokeRect(x, y, w, h);
+        });
+    }
+
+    function submitInput() {
+        if (!points.length && !boxes.length) return;
+
+        fetch('/process_input', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ points, boxes })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                console.error('Error:', data.error);
+                return;
+            }
+
+            const bytes = new Uint8Array(data.overlay.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            const base64 = btoa(String.fromCharCode.apply(null, bytes));
+            const overlayImage = new Image();
+            overlayImage.onload = () => {
+                ctx.drawImage(overlayImage, 0, 0, canvas.width, canvas.height);
+                isTracking = true;
+                updateButtonStates();
+
+                if (overlayTimeout) {
+                    clearTimeout(overlayTimeout);
+                }
+                overlayTimeout = setTimeout(() => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    points = [];
+                    boxes = [];
+                    updateButtonStates();
+                }, data.timeout);
+            };
+            overlayImage.src = 'data:image/jpeg;base64,' + base64;
+        })
+        .catch(error => console.error('Error:', error));
+    }
+
+    updateButtonStates();
+    </script>
+</body>
+</html>
