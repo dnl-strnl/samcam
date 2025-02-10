@@ -71,33 +71,39 @@ def make_app():
 
     @app.route('/process_input', methods=['POST'])
     def process_input():
+        try:
+            data = request.json
+            if data is None:
+                return jsonify(dict(error='Invalid JSON data.')), 400
 
-        data = request.json
+            points = data.get('points', [])
+            bboxes = data.get('boxes', [])
+            labels = np.array([1] * len(points), dtype=np.int32)
+            prompt = dict(bbox=bboxes, points=points, labels=labels)
 
-        points = data.get('points', [])
-        bboxes = data.get('boxes', [])
-        labels = np.array([1] * len(points), dtype=np.int32)
+            frame, frame_idx = video_stream.get_current_frame()
+            if frame is None:
+                return jsonify(dict(error='No frame available.')), 400
 
-        prompt = dict(bbox=bboxes, points=points, labels=labels)
+            try:
+                predictor.load_first_frame(frame)
+                predictor.add_new_prompt(frame_idx=0, obj_id=1, **prompt)
+            except Exception as sam2_predictor_error:
+                return jsonify(dict(error=f'{sam2_predictor_error=}')), 500
 
-        frame, frame_idx = video_stream.get_current_frame()
-        if frame is None:
-            return jsonify(dict(error='No frame available.'))
+            prompt_image = overlay_prompts(frame, points=points, boxes=bboxes)
+            video_stream.show_overlay = True
+            video_stream.overlay_image = prompt_image
+            video_stream.overlay_timeout = datetime.now() + timedelta(seconds=2)
 
-        predictor.load_first_frame(frame)
-        predictor.add_new_prompt(frame_idx=0, obj_id=1, **prompt)
+            global enable_tracking
+            enable_tracking = True
 
-        prompt_image = overlay_prompts(frame, points=points, boxes=bboxes)
+            ret, buffer = cv2.imencode('.jpg', prompt_image)
+            return jsonify(dict(overlay=buffer.tobytes().hex(), timeout=500))
 
-        video_stream.show_overlay = True
-        video_stream.overlay_image = prompt_image
-        video_stream.overlay_timeout = datetime.now() + timedelta(seconds=2)
-
-        global enable_tracking
-        enable_tracking = True
-
-        ret, buffer = cv2.imencode('.jpg', prompt_image)
-        return jsonify(dict(overlay=buffer.tobytes().hex(), timeout=500))
+        except Exception as process_input_error:
+            return jsonify(dict(error=f'{process_input_error=}')), 500
 
     return app
 

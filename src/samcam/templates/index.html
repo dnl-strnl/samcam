@@ -232,10 +232,18 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ points, boxes })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.error || 'Server error occurred.');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.error) {
                 console.error('Error:', data.error);
+                alert('Error: ' + data.error);
                 return;
             }
 
@@ -259,7 +267,12 @@
             };
             overlayImage.src = 'data:image/jpeg;base64,' + base64;
         })
-        .catch(error => console.error('Error:', error));
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error: ' + error.message);
+            isTracking = false;
+            updateButtonStates();
+        });
     }
 
     updateButtonStates();

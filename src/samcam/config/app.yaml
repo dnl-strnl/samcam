@@ -1,6 +1,6 @@
 VideoStream:
   _target_: samcam.stream_buffer.StreamBuffer
-  video_source: 1
+  video_source: 0
   buffer_size: 1
   frame_width: 640
   frame_height: 480
@@ -8,4 +8,4 @@ VideoStream:
 sam2_checkpoint: ./lib/sam2/checkpoints/sam2.1_hiera_tiny.pt
 model_cfg: configs/sam2.1/sam2.1_hiera_t.yaml # relative path
 device: cuda
-frame_buffer: ./outputs/frame_buffer
+frame_buffer: ${hydra:runtime.cwd}/outputs/frame_buffer
