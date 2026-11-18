@@ -1,0 +1,6 @@
+flask
+openai-whisper
+opencv-python-headless
+pillow
+torch
+transformers

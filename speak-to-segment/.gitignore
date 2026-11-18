@@ -1,0 +1,6 @@
+data/
+outputs/
+models/
+__pycache__/
+.venv-sam3/
+local/vendor/

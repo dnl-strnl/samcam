@@ -1,0 +1,5 @@
+flask
+hydra-core
+omegaconf
+pillow
+requests

@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speak-to-Segment</title>
+    <style>
+        :root {
+            --bg: #f4f4f5;
+            --surface: #ffffff;
+            --border: #e2e2e5;
+            --border-strong: #c9c9ce;
+            --text: #1c1c1f;
+            --muted: #77777f;
+            --faint: #a3a3aa;
+            --solid: #1c1c1f;
+            --solid-text: #ffffff;
+            --hover: #ececee;
+            --alert: #d1453b;
+            --radius: 6px;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #141415;
+                --surface: #1c1c1e;
+                --border: #2c2c2f;
+                --border-strong: #46464b;
+                --text: #ececee;
+                --muted: #8e8e96;
+                --faint: #5e5e66;
+                --solid: #ececee;
+                --solid-text: #141415;
+                --hover: #26262a;
+                --alert: #e5675d;
+            }
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 0 24px 48px;
+        }
+
+        .header {
+            display: flex;
+            align-items: baseline;
+            gap: 14px;
+            padding: 22px 0;
+            margin-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header h1 {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .header p {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 300px;
+            gap: 24px;
+            align-items: start;
+        }
+
+        .canvas-section,
+        .controls-section,
+        .history-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+
+        .canvas-section {
+            padding: 16px;
+        }
+
+        .drop-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 420px;
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius);
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            background: var(--hover);
+            border-color: var(--muted);
+        }
+
+        .drop-zone.has-image {
+            display: none;
+        }
+
+        .drop-zone svg {
+            width: 28px;
+            height: 28px;
+            color: var(--faint);
+            margin-bottom: 12px;
+        }
+
+        .drop-zone p {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .canvas-container {
+            display: none;
+            max-width: 100%;
+        }
+
+        .canvas-container.show {
+            display: block;
+        }
+
+        #imageCanvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            margin: 0 auto;
+            border-radius: 3px;
+        }
+
+        .mask-count {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .control-group {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .control-group:last-of-type {
+            border-bottom: none;
+        }
+
+        .control-group h3,
+        .transcription-display h4,
+        .history-header {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .control-group h3 {
+            margin-bottom: 12px;
+        }
+
+        button {
+            font: inherit;
+            cursor: pointer;
+            border-radius: var(--radius);
+            transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .record-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            height: 40px;
+            border: 1px solid var(--solid);
+            background: var(--solid);
+            color: var(--solid-text);
+            font-weight: 500;
+        }
+
+        .record-button::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .record-button:hover:not(:disabled) {
+            opacity: 0.85;
+        }
+
+        .record-button.listening {
+            background: transparent;
+            border-color: var(--border-strong);
+            color: var(--text);
+        }
+
+        .record-button.listening::before {
+            animation: blink 2.4s ease-in-out infinite;
+        }
+
+        .level {
+            height: 2px;
+            margin-top: 8px;
+            background: var(--border);
+            border-radius: 1px;
+            overflow: hidden;
+        }
+
+        .level-fill {
+            width: 0%;
+            height: 100%;
+            background: var(--muted);
+        }
+
+        .record-button.recording {
+            background: transparent;
+            border-color: var(--alert);
+            color: var(--alert);
+        }
+
+        .record-button.recording::before {
+            border-radius: 1px;
+            animation: blink 1.2s ease-in-out infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0.3; }
+        }
+
+        .status {
+            margin-top: 10px;
+            min-height: 18px;
+            color: var(--muted);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .status.recording {
+            color: var(--alert);
+        }
+
+        .steps {
+            display: none;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+            list-style: none;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .steps.show {
+            display: block;
+        }
+
+        .steps li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 3px 0;
+            color: var(--faint);
+        }
+
+        .steps li::before {
+            content: '';
+            flex-shrink: 0;
+            box-sizing: border-box;
+            width: 10px;
+            height: 10px;
+            border: 1.5px solid currentColor;
+            border-radius: 50%;
+        }
+
+        .steps li.active {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .steps li.active::before {
+            border-color: var(--border-strong);
+            border-top-color: var(--text);
+            animation: spin 0.8s linear infinite;
+        }
+
+        .steps li.done {
+            color: var(--muted);
+        }
+
+        .steps li.done::before {
+            background: currentColor;
+        }
+
+        .steps li.failed {
+            color: var(--alert);
+        }
+
+        .steps .step-detail {
+            margin-left: auto;
+            font-weight: 400;
+            text-align: right;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .transcription-display {
+            display: none;
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .transcription-display.show {
+            display: block;
+        }
+
+        .transcription-display h4 {
+            margin-bottom: 6px;
+        }
+
+        .transcription-display p {
+            font-size: 14px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+            accent-color: var(--solid);
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .clear-button,
+        .reset-button {
+            height: 34px;
+            border: 1px solid var(--border-strong);
+            background: transparent;
+            color: var(--text);
+            font-size: 13px;
+        }
+
+        .clear-button:hover:not(:disabled),
+        .reset-button:hover:not(:disabled) {
+            background: var(--hover);
+        }
+
+        .error-message {
+            display: none;
+            margin: 0 16px 16px;
+            padding: 10px 12px;
+            border: 1px solid var(--alert);
+            border-radius: var(--radius);
+            color: var(--alert);
+            font-size: 12px;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .history-section {
+            margin-top: 24px;
+        }
+
+        .history-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .prompt-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .prompt-list .empty {
+            padding: 20px 16px;
+            color: var(--faint);
+            font-size: 13px;
+        }
+
+        .prompt-item {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .prompt-item:last-child {
+            border-bottom: none;
+        }
+
+        .prompt-item .prompt-text {
+            font-size: 14px;
+            text-transform: lowercase;
+        }
+
+        .prompt-item .prompt-meta {
+            flex-shrink: 0;
+            color: var(--muted);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .prompt-item {
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            .prompt-item .prompt-meta {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Speak-to-Segment</h1>
+            <p>Segment an image by describing objects.</p>
+        </div>
+
+        <div class="main-content">
+            <div class="canvas-section">
+                <div id="dropZone" class="drop-zone">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p>Drop an image, or click to select</p>
+                    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                </div>
+
+                <div id="canvasContainer" class="canvas-container">
+                    <canvas id="imageCanvas"></canvas>
+                    <div id="maskCount" class="mask-count" style="display: none;"></div>
+                </div>
+            </div>
+
+            <div class="controls-section">
+                <div class="control-group">
+                    <h3>Prompt</h3>
+                    <button id="recordButton" class="record-button">
+                        <span id="buttonText">Listen</span>
+                    </button>
+                    <div class="level"><div id="levelFill" class="level-fill"></div></div>
+                    <div id="status" class="status">Load an image first.</div>
+                    <ol id="stepList" class="steps"></ol>
+
+                    <div id="transcriptionDisplay" class="transcription-display">
+                        <h4>Transcribed</h4>
+                        <p id="transcriptionText"></p>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Options</h3>
+                    <label class="checkbox-group">
+                        <input type="checkbox" id="aggregateCheckbox" checked>
+                        Keep previous masks
+                    </label>
+                </div>
+
+                <div class="control-group">
+                    <h3>Actions</h3>
+                    <div class="actions">
+                        <button id="clearButton" class="clear-button" disabled>Clear masks</button>
+                        <button id="resetButton" class="reset-button">New image</button>
+                    </div>
+                </div>
+
+                <div id="errorMessage" class="error-message"></div>
+            </div>
+        </div>
+
+        <div class="history-section">
+            <h2 class="history-header">History</h2>
+            <div id="promptList" class="prompt-list">
+                <p class="empty">No prompts yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Model config
+        let ASR_ENDPOINT = 'http://localhost:11216/predict';
+        let SAM_ENDPOINT = 'http://localhost:11217/predict';
+
+        fetch('/api/config')
+            .then(r => r.json())
+            .then(config => {
+                ASR_ENDPOINT = config.asr_endpoint;
+                SAM_ENDPOINT = config.sam_endpoint;
+            })
+            .catch(err => console.log('Using default endpoints'));
+
+        // State
+        let currentImage = null;
+        let currentImageBase64 = null;
+        let allContours = [];
+        let isListening = false;
+        let isBusy = false;
+        let micStream = null;
+        let audioContext = null;
+        let promptHistory = [];
+
+        // How dark everything outside the selected objects gets
+        const DIM_OPACITY = 0.8;
+
+        // Speech detection: when a spoken prompt starts and ends
+        const VAD = {
+            startThreshold: 0.015,  // mic level (RMS) that counts as speech...
+            noiseMultiplier: 3,     // ...or this many times the room's background level
+            releaseRatio: 0.6,      // once speaking, stay "in speech" down to this share of the threshold
+            startMs: 120,           // speech must last this long to open a prompt
+            endSilenceMs: 800,      // a pause this long closes it
+            prerollMs: 400,         // audio kept from just before speech was detected
+            tailMs: 200,            // closing silence kept on the end
+            minSpeechMs: 300,       // anything shorter is dropped as noise
+            maxSegmentMs: 10000,
+            sampleRate: 16000,      // rate sent to the ASR endpoint
+        };
+        let noiseLevel = 0.005;
+        let inSpeech = false;
+        let segment = [];
+        let preroll = [];
+        let loudMs = 0;
+        let speechMs = 0;
+        let silenceMs = 0;
+
+        // What one prompt goes through, and how each step reads before, during and after
+        const STEPS = [
+            { id: 'record', labels: { pending: 'Record', active: 'Recording', done: 'Recorded' } },
+            { id: 'send', labels: { pending: 'Send', active: 'Sending', done: 'Sent' } },
+            { id: 'transcribe', labels: { pending: 'Transcribe', active: 'Transcribing', done: 'Transcribed' } },
+            { id: 'segment', labels: { pending: 'Segment', active: 'Segmenting', done: 'Segmented' } },
+        ];
+        const stepState = {};
+        const stepEls = {};
+
+        // DOM
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const recordButton = document.getElementById('recordButton');
+        const buttonText = document.getElementById('buttonText');
+        const levelFill = document.getElementById('levelFill');
+        const status = document.getElementById('status');
+        const stepList = document.getElementById('stepList');
+        const transcriptionDisplay = document.getElementById('transcriptionDisplay');
+        const transcriptionText = document.getElementById('transcriptionText');
+        const aggregateCheckbox = document.getElementById('aggregateCheckbox');
+        const clearButton = document.getElementById('clearButton');
+        const resetButton = document.getElementById('resetButton');
+        const errorMessage = document.getElementById('errorMessage');
+        const maskCount = document.getElementById('maskCount');
+        const promptList = document.getElementById('promptList');
+
+        // Listeners
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', handleDragOver);
+        dropZone.addEventListener('dragleave', handleDragLeave);
+        dropZone.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileSelect);
+        recordButton.addEventListener('click', handleRecordClick);
+        clearButton.addEventListener('click', clearContours);
+        resetButton.addEventListener('click', resetApp);
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                loadImage(file);
+            }
+        }
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    currentImage = img;
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    // Convert to base64 for API
+                    currentImageBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+                    dropZone.classList.add('has-image');
+                    canvasContainer.classList.add('show');
+                    clearButton.disabled = false;
+                    setIdleStatus();
+
+                    // Clear previous contours
+                    allContours = [];
+                    updateMaskCount();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function idleStatus() {
+            if (!currentImageBase64) return 'Load an image first.';
+            return isListening ? 'Listening…' : 'Mic off.';
+        }
+
+        function setIdleStatus() {
+            status.classList.remove('recording', 'processing');
+            status.textContent = idleStatus();
+        }
+
+        STEPS.forEach(step => {
+            const el = document.createElement('li');
+            el.innerHTML = '<span class="step-label"></span><span class="step-detail"></span>';
+            stepList.appendChild(el);
+            stepEls[step.id] = el;
+        });
+
+        // Keeps the running step's stopwatch moving
+        setInterval(() => {
+            STEPS.filter(step => stepState[step.id]?.state === 'active').forEach(renderStep);
+        }, 100);
+
+        // A new prompt: every step back to pending
+        function resetSteps() {
+            STEPS.forEach(step => { stepState[step.id] = { state: 'pending', detail: '' }; });
+            STEPS.forEach(renderStep);
+            stepList.classList.add('show');
+        }
+
+        // state: 'pending' | 'active' | 'done' | 'failed'
+        function setStep(id, state, detail = '') {
+            stepState[id] = { state, detail, startedAt: performance.now() };
+            renderStep(STEPS.find(step => step.id === id));
+        }
+
+        function failActiveStep(detail) {
+            const running = STEPS.find(step => stepState[step.id]?.state === 'active');
+            if (running) setStep(running.id, 'failed', detail);
+        }
+
+        function renderStep(step) {
+            const { state, detail, startedAt } = stepState[step.id];
+            const el = stepEls[step.id];
+            let text = detail;
+            if (state === 'active') {
+                const elapsed = `${((performance.now() - startedAt) / 1000).toFixed(1)} s`;
+                text = detail ? `${detail} · ${elapsed}` : elapsed;
+            }
+            el.className = state;
+            el.children[0].textContent = step.labels[state] || step.labels.pending;
+            el.children[1].textContent = text;
+        }
+
+        async function handleRecordClick() {
+            if (!isListening) {
+                await startListening();
+            } else {
+                stopListening();
+            }
+        }
+
+        // Runs on the audio thread: hands the mic signal to the page in ~20 ms chunks
+        const TAP_WORKLET = `
+            class Tap extends AudioWorkletProcessor {
+                constructor() {
+                    super();
+                    this.buffer = new Float32Array(1024);
+                    this.filled = 0;
+                }
+                process(inputs) {
+                    const channel = inputs[0][0];
+                    if (channel) {
+                        for (let i = 0; i < channel.length; i++) {
+                            this.buffer[this.filled++] = channel[i];
+                            if (this.filled === this.buffer.length) {
+                                this.port.postMessage(this.buffer.slice(0));
+                                this.filled = 0;
+                            }
+                        }
+                    }
+                    return true;
+                }
+            }
+            registerProcessor('tap', Tap);
+        `;
+
+        async function startListening() {
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
+                audioContext = new AudioContext();
+                const workletUrl = URL.createObjectURL(new Blob([TAP_WORKLET], { type: 'application/javascript' }));
+                await audioContext.audioWorklet.addModule(workletUrl);
+                URL.revokeObjectURL(workletUrl);
+
+                const tap = new AudioWorkletNode(audioContext, 'tap');
+                tap.port.onmessage = (event) => handleAudioChunk(event.data);
+                audioContext.createMediaStreamSource(micStream).connect(tap);
+                tap.connect(audioContext.destination);  // outputs silence; keeps the node running
+
+                isListening = true;
+                resetSegment();
+                recordButton.classList.add('listening');
+                buttonText.textContent = 'Stop listening';
+                setIdleStatus();
+                hideError();
+
+            } catch (error) {
+                showError('Microphone access denied. Please enable microphone permissions.');
+                console.error('Error accessing microphone:', error);
+            }
+        }
+
+        function stopListening() {
+            if (micStream) micStream.getTracks().forEach(track => track.stop());
+            if (audioContext) audioContext.close();
+            micStream = null;
+            audioContext = null;
+            isListening = false;
+            if (inSpeech) setStep('record', 'failed', 'cancelled');
+            resetSegment();
+            recordButton.classList.remove('listening');
+            buttonText.textContent = 'Listen';
+            levelFill.style.width = '0%';
+            if (!isBusy) setIdleStatus();
+        }
+
+        function resetSegment() {
+            inSpeech = false;
+            segment = [];
+            preroll = [];
+            loudMs = 0;
+            speechMs = 0;
+            silenceMs = 0;
+            recordButton.classList.remove('recording');
+        }
+
+        function handleAudioChunk(chunk) {
+            if (!isListening) return;
+
+            const chunkMs = chunk.length / audioContext.sampleRate * 1000;
+            let sum = 0;
+            for (let i = 0; i < chunk.length; i++) sum += chunk[i] * chunk[i];
+            const rms = Math.sqrt(sum / chunk.length);
+            // The meter goes flat while a prompt is in flight, since nothing said then is kept
+            levelFill.style.width = isBusy ? '0%' : `${Math.min(100, rms * 800)}%`;
+
+            // Nothing to segment, or a prompt is still in flight: don't collect speech
+            if (isBusy || !currentImageBase64) {
+                if (inSpeech) {
+                    setStep('record', 'failed', 'cancelled');
+                    resetSegment();
+                }
+                return;
+            }
+
+            const threshold = Math.max(VAD.startThreshold, noiseLevel * VAD.noiseMultiplier);
+
+            if (!inSpeech) {
+                const loud = rms > threshold;
+                if (!loud) noiseLevel = noiseLevel * 0.95 + rms * 0.05;
+
+                preroll.push(chunk);
+                if (preroll.length > Math.ceil(VAD.prerollMs / chunkMs)) preroll.shift();
+
+                loudMs = loud ? loudMs + chunkMs : 0;
+                if (loudMs >= VAD.startMs) {
+                    inSpeech = true;
+                    segment = preroll;
+                    preroll = [];
+                    speechMs = loudMs;
+                    silenceMs = 0;
+                    recordButton.classList.add('recording');
+                    status.classList.add('recording');
+                    status.textContent = 'Hearing you…';
+                    resetSteps();
+                    setStep('record', 'active');
+                }
+                return;
+            }
+
+            segment.push(chunk);
+            if (rms > threshold * VAD.releaseRatio) {
+                speechMs += chunkMs;
+                silenceMs = 0;
+            } else {
+                silenceMs += chunkMs;
+            }
+
+            if (silenceMs >= VAD.endSilenceMs || segment.length * chunkMs >= VAD.maxSegmentMs) {
+                finishSegment(chunkMs);
+            }
+        }
+
+        function finishSegment(chunkMs) {
+            const chunks = segment;
+            const spokenMs = speechMs;
+            const trailingMs = silenceMs;
+            resetSegment();
+
+            // Too short to be a prompt: a click, a cough, a door
+            if (spokenMs < VAD.minSpeechMs) {
+                setStep('record', 'failed', 'too short, ignored');
+                setIdleStatus();
+                return;
+            }
+
+            // Keep a short tail of the closing silence, drop the rest
+            const dropChunks = Math.floor(Math.max(0, trailingMs - VAD.tailMs) / chunkMs);
+            const kept = dropChunks > 0 ? chunks.slice(0, -dropChunks) : chunks;
+
+            const samples = resample(concatChunks(kept), audioContext.sampleRate, VAD.sampleRate);
+            setStep('record', 'done', `${(samples.length / VAD.sampleRate).toFixed(1)} s of audio`);
+            processAudio(encodeWav(samples, VAD.sampleRate));
+        }
+
+        function concatChunks(chunks) {
+            const out = new Float32Array(chunks.reduce((n, c) => n + c.length, 0));
+            let offset = 0;
+            chunks.forEach(c => { out.set(c, offset); offset += c.length; });
+            return out;
+        }
+
+        function resample(samples, fromRate, toRate) {
+            if (fromRate === toRate) return samples;
+            const ratio = fromRate / toRate;
+            const out = new Float32Array(Math.floor(samples.length / ratio));
+            for (let i = 0; i < out.length; i++) {
+                // Average the input samples this output sample covers
+                const start = Math.floor(i * ratio);
+                const end = Math.min(samples.length, Math.max(start + 1, Math.floor((i + 1) * ratio)));
+                let sum = 0;
+                for (let j = start; j < end; j++) sum += samples[j];
+                out[i] = sum / (end - start);
+            }
+            return out;
+        }
+
+        function encodeWav(samples, sampleRate) {
+            const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+            const writeText = (offset, text) => {
+                for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+            };
+            writeText(0, 'RIFF');
+            view.setUint32(4, 36 + samples.length * 2, true);
+            writeText(8, 'WAVE');
+            writeText(12, 'fmt ');
+            view.setUint32(16, 16, true);
+            view.setUint16(20, 1, true);              // PCM
+            view.setUint16(22, 1, true);              // mono
+            view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true); // byte rate
+            view.setUint16(32, 2, true);              // block align
+            view.setUint16(34, 16, true);             // bits per sample
+            writeText(36, 'data');
+            view.setUint32(40, samples.length * 2, true);
+            for (let i = 0; i < samples.length; i++) {
+                const s = Math.max(-1, Math.min(1, samples[i]));
+                view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+            }
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        async function processAudio(audioBlob) {
+            isBusy = true;
+            try {
+                status.classList.remove('recording');
+                status.textContent = 'Mic paused until this prompt is done.';
+                const audioBase64 = await blobToBase64(audioBlob);
+                const body = JSON.stringify({
+                    audio: audioBase64,
+                    image: currentImageBase64
+                });
+                const payloadSize = `${Math.round(body.length / 1024)} KB`;
+
+                // Send data to backend
+                setStep('send', 'active', payloadSize);
+                const sentAt = performance.now();
+                const response = await fetch('/api/segment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Segmentation failed');
+                }
+
+                // The backend reports each stage as it finishes
+                let result = null;
+                for await (const event of readEvents(response)) {
+                    if (event.stage === 'received') {
+                        const sendMs = (performance.now() - sentAt).toFixed(0);
+                        setStep('send', 'done', `${payloadSize} · ${sendMs} ms`);
+                        setStep('transcribe', 'active');
+                    } else if (event.stage === 'transcribed') {
+                        setStep('transcribe', 'done', `${(event.asr_latency * 1000).toFixed(0)} ms`);
+                        setStep('segment', 'active');
+
+                        // Display transcription
+                        transcriptionText.textContent = event.text_prompt;
+                        transcriptionDisplay.classList.add('show');
+                    } else if (event.stage === 'error') {
+                        // Always-on listening will pick up the odd non-word; that's not an error
+                        if ((event.error || '').startsWith('No text transcribed')) {
+                            failActiveStep('no words heard');
+                            return;
+                        }
+                        throw new Error(event.error || 'Segmentation failed');
+                    } else if (event.stage === 'done') {
+                        result = event;
+                    }
+                }
+                if (!result) throw new Error('Connection closed before the masks arrived');
+                console.log('Full response:', result);
+
+                const textPrompt = result.text_prompt;
+                const contours = result.contours || [];
+
+                // Handle contours
+                if (!aggregateCheckbox.checked) {
+                    allContours = [];
+                }
+
+                if (contours && contours.length > 0) {
+                    const newContours = contours.map((contour, idx) => ({
+                        contour: contour,
+                        prompt: textPrompt,
+                        color: generateColor(allContours.length + idx)
+                    }));
+                    allContours.push(...newContours);
+
+                    // Add to history
+                    promptHistory.unshift({
+                        text: textPrompt,
+                        maskCount: newContours.length,
+                        timestamp: new Date().toLocaleString(),
+                        asrLatency: result.asr_latency,
+                        samLatency: result.sam_latency,
+                        totalLatency: result.total_latency
+                    });
+                    updatePromptHistory();
+                }
+
+                // Redraw with contours
+                redrawCanvas();
+                updateMaskCount();
+
+                // Show timing info
+                const samMs = (result.sam_latency * 1000).toFixed(0);
+                const outcome = contours.length > 0
+                    ? `${contours.length} mask${contours.length !== 1 ? 's' : ''}`
+                    : 'no match';
+                setStep('segment', 'done', `${outcome} · ${samMs} ms`);
+
+            } catch (error) {
+                failActiveStep('failed');
+                showError('Processing failed: ' + error.message);
+                console.error('Processing error:', error);
+            } finally {
+                isBusy = false;
+                setIdleStatus();
+            }
+        }
+
+        // Yields the backend's progress events: one JSON object per line
+        async function* readEvents(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffered = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffered += decoder.decode(value, { stream: true });
+                const lines = buffered.split('\n');
+                buffered = lines.pop();
+                for (const line of lines) {
+                    if (line.trim()) yield JSON.parse(line);
+                }
+            }
+        }
+
+        function redrawCanvas() {
+            // Clear and redraw image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(currentImage, 0, 0);
+
+            // Spotlight: one path holding every selected object
+            const selected = new Path2D();
+            let hasSelection = false;
+            allContours.forEach(contourObj => {
+                hasSelection = addContour(selected, contourObj.contour) || hasSelection;
+            });
+            if (!hasSelection) {
+                return;
+            }
+
+            // Dim everything, then redraw the image at full brightness inside the objects
+            ctx.fillStyle = `rgba(0, 0, 0, ${DIM_OPACITY})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.clip(selected);
+            ctx.drawImage(currentImage, 0, 0);
+            ctx.restore();
+        }
+
+        function addContour(path, contourFlat) {
+            // Contour is flattened array: [x1, y1, x2, y2, ...]
+            if (!contourFlat || contourFlat.length < 6) {
+                console.warn('Invalid contour:', contourFlat);
+                return false;
+            }
+
+            path.moveTo(contourFlat[0], contourFlat[1]);
+            for (let i = 2; i < contourFlat.length; i += 2) {
+                path.lineTo(contourFlat[i], contourFlat[i + 1]);
+            }
+            path.closePath();
+            return true;
+        }
+
+        function generateColor(index) {
+            const colors = [
+                { r: 0, g: 255, b: 0 },  // Green
+            ];
+            return colors[index % colors.length];
+        }
+
+        function clearContours() {
+            allContours = [];
+            redrawCanvas();
+            updateMaskCount();
+        }
+
+        function resetApp() {
+            allContours = [];
+            currentImage = null;
+            currentImageBase64 = null;
+            dropZone.classList.remove('has-image');
+            canvasContainer.classList.remove('show');
+            clearButton.disabled = true;
+            transcriptionDisplay.classList.remove('show');
+            stepList.classList.remove('show');
+            setIdleStatus();
+            fileInput.value = '';
+            updateMaskCount();
+        }
+
+        function updateMaskCount() {
+            if (allContours.length > 0) {
+                maskCount.textContent = `${allContours.length} mask${allContours.length !== 1 ? 's' : ''}`;
+                maskCount.style.display = 'block';
+            } else {
+                maskCount.style.display = 'none';
+            }
+        }
+
+        function updatePromptHistory() {
+            if (promptHistory.length === 0) {
+                promptList.innerHTML = '<p class="empty">No prompts yet.</p>';
+                return;
+            }
+
+            promptList.innerHTML = promptHistory.map(item => {
+                const asrMs = item.asrLatency ? (item.asrLatency * 1000).toFixed(0) : 'N/A';
+                const samMs = item.samLatency ? (item.samLatency * 1000).toFixed(0) : 'N/A';
+                const totalMs = item.totalLatency ? (item.totalLatency * 1000).toFixed(0) : 'N/A';
+
+                return `
+                    <div class="prompt-item">
+                        <div class="prompt-text">"${item.text}"</div>
+                        <div class="prompt-meta">
+                            ${item.maskCount} mask${item.maskCount !== 1 ? 's' : ''} ·
+                            ASR ${asrMs} ms · SAM ${samMs} ms ·
+                            ${item.timestamp}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            setTimeout(() => {
+                errorMessage.classList.remove('show');
+            }, 5000);
+        }
+
+        function hideError() {
+            errorMessage.classList.remove('show');
+        }
+    </script>
+</body>
+</html>
